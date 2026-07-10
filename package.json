@@ -1,0 +1,77 @@
+{
+  "name": "disk-space-visualizer",
+  "version": "1.0.0",
+  "description": "Local cross-platform disk space analyzer and treemap visualizer.",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "vite --host 127.0.0.1",
+    "electron:dev": "npm run build && electron .",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "scan:sample": "node server.js --scan .",
+    "dist:win": "npm run build && electron-builder --win portable --x64",
+    "dist:win:arm64": "npm run build && electron-builder --win portable --arm64",
+    "dist:mac": "npm run build && electron-builder --mac dmg zip",
+    "dist:linux": "npm run build && electron-builder --linux AppImage tar.gz"
+  },
+  "keywords": [
+    "disk",
+    "storage",
+    "windows",
+    "macos",
+    "linux",
+    "treemap"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.20.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.0.2",
+    "electron": "^39.2.7",
+    "electron-builder": "^26.0.12",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "vite": "^8.0.14"
+  },
+  "build": {
+    "appId": "com.local.diskspacevisualizer",
+    "productName": "Disk Space Visualizer",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "server.js",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "tar.gz"
+      ]
+    }
+  }
+}
