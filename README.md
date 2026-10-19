@@ -1,72 +1,42 @@
-# Disk Space Visualizer
+<p align="center">
+  <img src="assets/hero.svg" alt="Bytescape: a treemap of folders; one tile is moved to Trash and the rest re-flow while the total drops" width="880">
+</p>
 
-A local Node and React app for cross-platform disk usage analysis. It scans a folder from the local server process, persists scan snapshots under the OS temp directory, and renders an interactive treemap/tree in the browser.
+# Bytescape
 
-## Run
+See what is eating your disk, and clean it up safely. Bytescape scans a folder or a whole drive, draws it as a treemap, and lets you send the big stuff to Trash without leaving the app.
 
-```sh
-npm start
-```
+## Features
 
-Open `http://127.0.0.1:5178`.
+- **Treemap and simple view.** Drill into any folder; sizes update live while the scan runs.
+- **Fast scans.** Directory listing runs on worker threads; about two million files take a minute.
+- **Safe cleanup.** Suggestions for node_modules, build output, Xcode and Gradle caches, old logs, big archives and duplicates. Move to Trash has a 6 second undo, and the treemap, folder sizes and totals update the moment you click.
+- **Breakdown by file type.** Find every video, disk image or archive across the scan.
+- **For agents.** An optional read-only MCP endpoint lets AI tools ask what is using your space.
+- **Private.** Everything runs locally. Scanning is read-only, and nothing about your files leaves your machine.
 
-On macOS, you can also double-click `Disk Space Visualizer.command`.
+## Download
 
-On Windows, you can double-click `Disk Space Visualizer.bat` from the project folder after installing Node.js and dependencies.
+Get the latest build from [Releases](https://github.com/arshtepe/bytescape/releases) (macOS, Apple Silicon).
 
-## Build UI
-
-```sh
-npm run build
-```
-
-## Desktop Builds
-
-Run as an Electron desktop app locally:
+The app is not notarized yet, so macOS will block the first launch. Right-click the app and choose **Open**, or run:
 
 ```sh
-npm run electron:dev
+xattr -dr com.apple.quarantine /Applications/Bytescape.app
 ```
 
-Build a portable Windows x64 executable:
+## Build from source
+
+Requires Node.js 18 or newer.
 
 ```sh
-npm run dist:win
+npm install
+npm run electron:dev   # run the desktop app
+npm run dist:mac       # or dist:win, dist:linux
 ```
 
-The portable `.exe` is written to `release/Disk Space Visualizer 1.0.0.exe`.
+To use it in a browser instead, run `npm run build && npm start` and open `http://127.0.0.1:5178`.
 
-Optional platform builds:
+## License
 
-```sh
-npm run dist:win:arm64
-npm run dist:mac
-npm run dist:linux
-```
-
-## Notes
-
-- Scans run locally and do not upload file paths or sizes anywhere.
-- Scan snapshots are saved under your OS temp folder, in `disk-space-visualizer-scans/<uuid>/`.
-- Filesystem operations are read-only: the app uses metadata reads and directory listing only. It does not write, move, rename, or delete scanned files.
-- Running scans stream status over WebSocket, so discovered folders and counted sizes update before the full scan finishes.
-- The `Scans` tab lists saved scans, their status, size, entry count, start time, and lets you reopen them.
-- The toolbar shows whether a scan is idle, scanning, finished, cancelled, or failed.
-- The treemap fits the available screen by default. Use the zoom controls or `Cmd/Ctrl` + mouse wheel over the treemap to zoom and pan.
-- Full paths are selectable in the toolbar and details panel. Use `Copy Path` on the selected item or any tree row to copy a file or folder path.
-- Use `Show in Folder` / `Show` to reveal files or folders in Finder, Windows Explorer, or the Linux file manager.
-- Symlinks are not followed, which avoids loops and duplicate counting.
-- Permission errors are captured in the scan log.
-- Full-disk scans can take a while. macOS may deny access to protected folders unless the terminal app has Full Disk Access; Windows may deny access to protected system folders unless the app is run from an elevated terminal.
-
-## Platform Notes
-
-- macOS and Linux show home, current project, and filesystem root shortcuts.
-- Windows shows home, current project, and detected drive roots such as `C:\` or `D:\`.
-- The app uses Node's platform path handling, so Windows paths with backslashes are supported.
-
-## CLI Smoke Test
-
-```sh
-npm run scan:sample
-```
+MIT

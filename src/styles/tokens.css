@@ -1,0 +1,119 @@
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap");
+
+:root,
+:root[data-theme="light"] {
+  --accent: #4f46e5;
+  --accent-fg: #ffffff;
+  --accent-soft: rgba(79, 70, 229, 0.1);
+  --bg: #eef0f3;
+  --surface: #ffffff;
+  --surface-2: #f1f3f6;
+  --inset: #f6f7f9;
+  --border: #e4e7ec;
+  --border-2: #eceef2;
+  --fg: #1b1e24;
+  --fg-2: #5c6470;
+  --fg-3: #98a0ac;
+  --chrome: #e8eaee;
+  --shadow: 0 1px 2px rgba(16, 20, 28, 0.05);
+}
+
+:root[data-theme="dark"] {
+  --accent: #4f46e5;
+  --accent-fg: #ffffff;
+  --accent-soft: rgba(79, 70, 229, 0.18);
+  --bg: #0c0d11;
+  --surface: #15171c;
+  --surface-2: #1d2027;
+  --inset: #101216;
+  --border: #262a32;
+  --border-2: #20242b;
+  --fg: #eef0f3;
+  --fg-2: #9aa2ae;
+  --fg-3: #646b77;
+  --chrome: #101216;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+/* Semantic colors used throughout — not theme-dependent in the design. */
+:root {
+  --ok: #2f9e6b;
+  --ok-soft: rgba(47, 158, 107, 0.14);
+  --warn: #b0742c;
+  --warn-soft: rgba(201, 138, 63, 0.14);
+  --danger: #cf5450;
+  --danger-soft: rgba(207, 84, 80, 0.14);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+::selection {
+  background: rgba(79, 70, 229, 0.18);
+}
+
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(130, 140, 155, 0.32);
+  border-radius: 9px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(130, 140, 155, 0.5);
+}
+
+.mono {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+@keyframes dv-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes dv-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}

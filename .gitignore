@@ -6,3 +6,5 @@ dist/
 dist-server/
 release/
 .electron-builder-cache/
+electron/main.js
+electron/main.js.map

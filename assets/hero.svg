@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="320" viewBox="0 0 880 320" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>Bytescape: see what is eating your disk</title>
+  <defs>
+    <linearGradient id="brand" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7b8cff"/>
+      <stop offset="1" stop-color="#e0709a"/>
+    </linearGradient>
+    <clipPath id="card"><rect width="880" height="320" rx="18"/></clipPath>
+  </defs>
+
+  <rect width="880" height="320" rx="18" fill="#12131a"/>
+
+  <g clip-path="url(#card)">
+    <!-- Left: name, tagline, total that drops after the trash -->
+    <rect x="32" y="40" width="40" height="40" rx="11" fill="url(#brand)"/>
+    <g fill="#fff">
+      <rect x="41" y="49" width="9" height="22" rx="2"/>
+      <rect x="53" y="49" width="10" height="10" rx="2"/>
+      <rect x="53" y="61" width="10" height="10" rx="2"/>
+    </g>
+    <text x="84" y="70" font-size="30" font-weight="700" fill="#eceef6">Bytescape</text>
+    <text x="32" y="112" font-size="15" fill="#9a9eb4">See what is eating your disk.</text>
+    <text x="32" y="133" font-size="15" fill="#9a9eb4">Clean it up safely.</text>
+
+    <text x="32" y="186" font-size="12" font-weight="600" fill="#6f7389" letter-spacing="1.2">SCANNED</text>
+    <text x="32" y="222" font-size="34" font-weight="700" fill="#eceef6">146 GB
+      <animate attributeName="opacity" dur="8s" repeatCount="indefinite" values="1;1;0;0" keyTimes="0;0.55;0.6;1"/>
+    </text>
+    <text x="32" y="222" font-size="34" font-weight="700" fill="#4fd1a1" opacity="0">128 GB
+      <animate attributeName="opacity" dur="8s" repeatCount="indefinite" values="0;0;1;1" keyTimes="0;0.55;0.6;1"/>
+    </text>
+
+    <!-- Right: treemap. Everything fades in, one tile goes to Trash, neighbours re-flow -->
+    <g>
+      <animate attributeName="opacity" dur="8s" repeatCount="indefinite" values="0;1;1;0" keyTimes="0;0.08;0.93;1"/>
+
+      <rect x="360" y="32" width="220" height="256" rx="10" fill="#6b7cff"/>
+      <text x="376" y="62" font-size="16" font-weight="700" fill="#fff">Movies</text>
+      <text x="376" y="82" font-size="13" fill="#ffffffcc">56 GB</text>
+
+      <rect x="584" y="32" width="264" height="120" rx="10" fill="#e0709a"/>
+      <text x="600" y="62" font-size="16" font-weight="700" fill="#fff">Docker.raw</text>
+      <text x="600" y="82" font-size="13" fill="#ffffffcc">48 GB</text>
+
+      <!-- The tile that gets trashed -->
+      <rect x="584" y="156" width="128" height="132" rx="10" fill="#3fb6a8">
+        <animate attributeName="fill" dur="8s" repeatCount="indefinite" values="#3fb6a8;#3fb6a8;#e5484d;#e5484d" keyTimes="0;0.37;0.4;1"/>
+        <animate attributeName="width" dur="8s" repeatCount="indefinite" values="128;128;0;0" keyTimes="0;0.42;0.5;1"/>
+        <animate attributeName="opacity" dur="8s" repeatCount="indefinite" values="1;1;0;0" keyTimes="0;0.44;0.5;1"/>
+      </rect>
+      <g>
+        <animate attributeName="opacity" dur="8s" repeatCount="indefinite" values="1;1;0;0" keyTimes="0;0.41;0.44;1"/>
+        <text x="598" y="184" font-size="15" font-weight="700" fill="#fff">DerivedData</text>
+        <text x="598" y="203" font-size="13" fill="#ffffffcc">18 GB</text>
+      </g>
+
+      <rect x="716" y="156" width="132" height="64" rx="10" fill="#e7a948">
+        <animate attributeName="x" dur="8s" repeatCount="indefinite" values="716;716;584;584" keyTimes="0;0.5;0.6;1"/>
+        <animate attributeName="width" dur="8s" repeatCount="indefinite" values="132;132;264;264" keyTimes="0;0.5;0.6;1"/>
+      </rect>
+      <text x="730" y="184" font-size="14" font-weight="700" fill="#2a1d05">node_modules
+        <animate attributeName="x" dur="8s" repeatCount="indefinite" values="730;730;598;598" keyTimes="0;0.5;0.6;1"/>
+      </text>
+      <text x="730" y="203" font-size="12" fill="#2a1d05cc">14 GB
+        <animate attributeName="x" dur="8s" repeatCount="indefinite" values="730;730;598;598" keyTimes="0;0.5;0.6;1"/>
+      </text>
+
+      <rect x="716" y="224" width="132" height="64" rx="10" fill="#9a7cf0">
+        <animate attributeName="x" dur="8s" repeatCount="indefinite" values="716;716;584;584" keyTimes="0;0.5;0.6;1"/>
+        <animate attributeName="width" dur="8s" repeatCount="indefinite" values="132;132;264;264" keyTimes="0;0.5;0.6;1"/>
+      </rect>
+      <text x="730" y="252" font-size="14" font-weight="700" fill="#fff">Photos
+        <animate attributeName="x" dur="8s" repeatCount="indefinite" values="730;730;598;598" keyTimes="0;0.5;0.6;1"/>
+      </text>
+      <text x="730" y="271" font-size="12" fill="#ffffffcc">10 GB
+        <animate attributeName="x" dur="8s" repeatCount="indefinite" values="730;730;598;598" keyTimes="0;0.5;0.6;1"/>
+      </text>
+
+      <!-- Cursor: drifts in, clicks the tile, moves away -->
+      <g opacity="0">
+        <animate attributeName="opacity" dur="8s" repeatCount="indefinite" values="0;0;1;1;0;0" keyTimes="0;0.14;0.2;0.46;0.52;1"/>
+        <animateTransform attributeName="transform" type="translate" dur="8s" repeatCount="indefinite" calcMode="spline"
+          values="470 300; 470 300; 640 222; 640 222; 700 300; 700 300" keyTimes="0;0.16;0.34;0.42;0.52;1"
+          keySplines="0 0 1 1; 0.4 0 0.2 1; 0 0 1 1; 0.4 0 0.2 1; 0 0 1 1"/>
+        <path d="M0 0 L0 18 L5 13.5 L8.5 21 L11.5 19.7 L8 12.3 L14 12.3 Z" fill="#fff" stroke="#12131a" stroke-width="1.4" stroke-linejoin="round"/>
+        <circle cx="1" cy="1" r="2" fill="none" stroke="#fff" stroke-width="2" opacity="0">
+          <animate attributeName="r" dur="8s" repeatCount="indefinite" values="2;2;18;18" keyTimes="0;0.37;0.43;1"/>
+          <animate attributeName="opacity" dur="8s" repeatCount="indefinite" values="0;0;0.9;0;0" keyTimes="0;0.37;0.38;0.43;1"/>
+        </circle>
+      </g>
+    </g>
+
+    <!-- Toast -->
+    <g opacity="0">
+      <animate attributeName="opacity" dur="8s" repeatCount="indefinite" values="0;0;1;1;0;0" keyTimes="0;0.52;0.57;0.88;0.93;1"/>
+      <animateTransform attributeName="transform" type="translate" dur="8s" repeatCount="indefinite" calcMode="spline"
+        values="0 14; 0 14; 0 0; 0 0" keyTimes="0;0.52;0.58;1" keySplines="0 0 1 1; 0.2 0.8 0.2 1; 0 0 1 1"/>
+      <rect x="32" y="248" width="296" height="40" rx="11" fill="#f4f5fa"/>
+      <text x="48" y="273" font-size="13.5" fill="#1b1c24">Moved <tspan font-weight="700">DerivedData</tspan> to Trash · −18 GB</text>
+    </g>
+  </g>
+</svg>

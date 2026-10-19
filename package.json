@@ -1,15 +1,17 @@
 {
-  "name": "disk-space-visualizer",
-  "version": "1.0.0",
-  "description": "Local cross-platform disk space analyzer and treemap visualizer.",
-  "main": "electron/main.cjs",
+  "name": "bytescape",
+  "version": "1.1.0",
+  "description": "See what is eating your disk: a fast, local treemap disk space analyzer with safe cleanup.",
+  "main": "dist-server/electron/main.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "vite --host 127.0.0.1",
+    "start": "tsx server/index.ts",
+    "mcp": "tsx server/mcp.ts",
+    "dev": "concurrently -k -n server,client -c blue,green \"tsx watch server/index.ts\" \"vite --host 127.0.0.1\"",
     "electron:dev": "npm run build && electron .",
-    "build": "vite build",
+    "typecheck": "tsc -p tsconfig.client.json --noEmit && tsc -p tsconfig.server.json --noEmit",
+    "build": "tsc -p tsconfig.server.json && vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "scan:sample": "node server.js --scan .",
+    "scan:sample": "tsx server/index.ts --scan .",
     "dist:win": "npm run build && electron-builder --win portable --x64",
     "dist:win:arm64": "npm run build && electron-builder --win portable --arm64",
     "dist:mac": "npm run build && electron-builder --mac dmg zip",
@@ -28,30 +30,43 @@
     "node": ">=18"
   },
   "dependencies": {
+    "trash": "^10.1.1",
     "ws": "^8.20.1"
   },
   "devDependencies": {
+    "@types/node": "^26.1.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^6.0.2",
+    "concurrently": "^10.0.3",
     "electron": "^39.2.7",
     "electron-builder": "^26.0.12",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
+    "tsx": "^4.23.0",
+    "typescript": "^7.0.2",
     "vite": "^8.0.14"
   },
   "build": {
-    "appId": "com.local.diskspacevisualizer",
-    "productName": "Disk Space Visualizer",
+    "appId": "io.github.arshtepe.bytescape",
+    "productName": "Bytescape",
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "build"
     },
     "files": [
       "dist/**/*",
-      "electron/**/*",
-      "server.js",
+      "dist-server/**/*",
+      "build/tray*.png",
       "package.json"
     ],
     "asar": true,
+    "asarUnpack": [
+      "node_modules/trash/**/*"
+    ],
     "win": {
+      "icon": "build/icon.png",
       "target": [
         {
           "target": "portable",
@@ -62,12 +77,14 @@
       ]
     },
     "mac": {
+      "icon": "build/icon.icns",
       "target": [
         "dmg",
         "zip"
       ]
     },
     "linux": {
+      "icon": "build/icon.png",
       "target": [
         "AppImage",
         "tar.gz"

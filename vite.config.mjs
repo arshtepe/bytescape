@@ -9,6 +9,7 @@ export default defineConfig({
     port: 5179,
     proxy: {
       "/api": "http://127.0.0.1:5178",
+      "/mcp": "http://127.0.0.1:5178",
       "/ws": {
         target: "ws://127.0.0.1:5178",
         ws: true

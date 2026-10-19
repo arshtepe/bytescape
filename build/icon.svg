@@ -1,0 +1,16 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4f46e5"/>
+      <stop offset="1" stop-color="#8f5fd6"/>
+    </linearGradient>
+  </defs>
+  <!-- Indigo squircle with the Bytescape brand gradient -->
+  <rect x="96" y="96" width="832" height="832" rx="196" fill="url(#bg)"/>
+  <!-- Brand mark: tall block + two stacked blocks, filled white -->
+  <g fill="#ffffff">
+    <rect x="292" y="292" width="195" height="439" rx="39"/>
+    <rect x="536" y="292" width="195" height="195" rx="39"/>
+    <rect x="536" y="536" width="195" height="195" rx="39"/>
+  </g>
+</svg>
