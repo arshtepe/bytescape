@@ -15,6 +15,10 @@ const path = require("path");
 const { parentPort, workerData } = require("worker_threads");
 
 const includeHidden = Boolean(workerData && workerData.includeHidden);
+// Directories left out of the scan entirely: on macOS the /System/Volumes/Data
+// twins of firmlinked folders (/Users, /Applications...), which a scan of /
+// would otherwise walk and count twice.
+const skipPaths = new Set((workerData && workerData.skipPaths) || []);
 const CHUNK = 5000;
 
 /**
@@ -76,6 +80,7 @@ function scanDirectory(dirPath, taskId) {
     if (!includeHidden && name.startsWith(".")) continue;
 
     const absPath = path.join(dirPath, name);
+    if (skipPaths.has(absPath)) continue;
     let kind;
     let size = 0;
     let mtimeMs = 0;
@@ -87,7 +92,10 @@ function scanDirectory(dirPath, taskId) {
       else if (stats.isFile()) kind = "file";
       else if (stats.isSymbolicLink()) kind = "symlink";
       else kind = "other";
-      size = kind === "file" ? stats.size : 0;
+      // Space on disk, as du and Finder's "on disk" count it: sparse disk
+      // images (Docker.raw, VM disks) and compressed files use less than their
+      // length. Windows has no block count, so it falls back to the length.
+      size = kind === "file" ? (typeof stats.blocks === "number" ? stats.blocks * 512 : stats.size) : 0;
       mtimeMs = stats.mtimeMs;
     } catch (error) {
       kind = "inaccessible";

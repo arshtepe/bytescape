@@ -46,14 +46,16 @@ export function CleanupScreen({ scan, suggestions, reclaimTotalLabel, onHide, on
     );
   }, [trashEvent]);
 
-  const effectiveSelected = selectedIds ?? new Set(suggestions.map((item) => item.id));
+  // Until the user picks, only safe items (rebuildable output, known caches) are selected.
+  const defaultSelected = () => new Set(suggestions.filter((item) => item.safe).map((item) => item.id));
+  const effectiveSelected = selectedIds ?? defaultSelected();
   const selectedSuggestions = suggestions.filter((item) => effectiveSelected.has(item.id));
   const selectedSize = selectedSuggestions.reduce((sum, item) => sum + item.size, 0);
   const allSelected = suggestions.length > 0 && selectedSuggestions.length === suggestions.length;
 
   const toggleOne = (id: string) => {
     setSelectedIds((current) => {
-      const base = current ?? new Set(suggestions.map((item) => item.id));
+      const base = current ?? defaultSelected();
       const next = new Set(base);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -101,7 +103,7 @@ export function CleanupScreen({ scan, suggestions, reclaimTotalLabel, onHide, on
             <div className="cleanup-header-title">Suggested cleanup</div>
           </div>
           <div className="cleanup-header-sub">
-            Safe-to-remove files from this scan. Review, then move to Trash — nothing is gone until you empty it.
+            Rebuildable output and caches are selected. Duplicates, archives and logs are listed for you to review. Nothing is gone until you empty Trash.
           </div>
         </div>
         <div style={{ textAlign: "right", flex: "0 0 auto" }}>

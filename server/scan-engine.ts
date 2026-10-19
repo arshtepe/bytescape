@@ -21,6 +21,8 @@ import {
   childrenRoot,
   clampInt,
   dirsPath,
+  legacyDirsPath,
+  writeNdjsonAtomic,
   DEFAULT_SCAN_ROOT,
   errorsPath,
   freeBytes,
@@ -162,18 +164,16 @@ async function writeSnapshot(job: ScanJob, options: { includeDirs?: boolean } = 
   ];
   // Serializing the full dirs map is O(total directories); doing it on the
   // periodic snapshot made large scans quadratic. Live folder views read
-  // job.dirs from memory (getScanStore), so dirs.json is only needed once the
-  // scan settles — write it on the final snapshot only.
-  if (options.includeDirs) {
-    writes.push([dirsPath(job.id), Array.from(job.dirs.values())]);
-  }
-  await Promise.all(
-    writes.map(async ([target, payload]) => {
+  // job.dirs from memory (getScanStore), so the dirs file is only needed once
+  // the scan settles — write it on the final snapshot only.
+  await Promise.all([
+    ...writes.map(async ([target, payload]) => {
       const tmp = `${target}.${process.pid}.${crypto.randomUUID()}.tmp`;
       await fsp.writeFile(tmp, JSON.stringify(payload));
       await fsp.rename(tmp, target);
-    })
-  );
+    }),
+    options.includeDirs ? writeNdjsonAtomic(dirsPath(job.id), job.dirs.values()) : Promise.resolve()
+  ]);
 }
 
 function queueSnapshotWrite(job: ScanJob, options: { includeDirs?: boolean } = {}): Promise<void> {
@@ -386,6 +386,36 @@ const WORKER_INBOX_LIMIT = 16;
 const WRITE_BACKLOG_LIMIT = 64 * 1024 * 1024;
 const DISPATCH_BATCH = 1;
 
+// macOS firmlinks: /Users, /Applications, /Library and more are the same
+// folders as their twins under /System/Volumes/Data, but look like ordinary
+// directories, so a scan of / counted the whole Data volume twice (1.42 TB on
+// a 1 TB disk). Returns the Data-side twin of every firmlink whose / side this
+// scan will walk anyway.
+const FIRMLINKS_FILE = "/usr/share/firmlinks";
+const DATA_VOLUME = "/System/Volumes/Data";
+
+function isInsideOrEqual(target: string, dir: string): boolean {
+  return target === dir || target.startsWith(dir.endsWith(path.sep) ? dir : dir + path.sep);
+}
+
+function firmlinkTwins(rootPath: string): string[] {
+  if (process.platform !== "darwin") return [];
+  let lines: string[];
+  try {
+    lines = fs.readFileSync(FIRMLINKS_FILE, "utf8").split("\n");
+  } catch {
+    return [];
+  }
+  const twins: string[] = [];
+  for (const line of lines) {
+    const [rootSide, dataRelative] = line.split("\t");
+    if (!rootSide || !dataRelative) continue;
+    const twin = path.join(DATA_VOLUME, dataRelative.trim());
+    if (isInsideOrEqual(rootSide, rootPath) && isInsideOrEqual(twin, rootPath)) twins.push(twin);
+  }
+  return twins;
+}
+
 function workerScriptPath(): string {
   // Plain-JS worker lives next to this module in both dev (server/) and
   // compiled (dist-server/server/) layouts.
@@ -410,6 +440,7 @@ async function scanTree(job: ScanJob, options: ScanOptions): Promise<void> {
   job.dirs.set(rootNode.path, rootNode);
 
   const workerCount = options.workers;
+  const skipPaths = firmlinkTwins(rootNode.path);
   const workers: Worker[] = [];
   const outstanding: number[] = new Array(workerCount).fill(0);
   const queue: Array<{ dirPath: string; depth: number }> = [{ dirPath: rootNode.path, depth: 0 }];
@@ -572,7 +603,7 @@ async function scanTree(job: ScanJob, options: ScanOptions): Promise<void> {
 
     for (let index = 0; index < workerCount; index += 1) {
       const worker = new Worker(workerScriptPath(), {
-        workerData: { includeHidden: options.includeHidden }
+        workerData: { includeHidden: options.includeHidden, skipPaths }
       });
       worker.on("message", handleMessage(index));
       worker.on("error", (error) => void finish(error instanceof Error ? error : new Error(String(error))));
@@ -888,7 +919,7 @@ async function applyTrash(id: string, paths: string[]): Promise<TrashApplied | n
     }
   };
   await Promise.all([
-    writeAtomic(dirsPath(id), JSON.stringify(Array.from(dirs.values()))),
+    writeNdjsonAtomic(dirsPath(id), dirs.values()),
     writeAtomic(snapshotPath(id), JSON.stringify(updated)),
     addTrashed(id, removed)
   ]);
@@ -998,6 +1029,7 @@ async function readPersistedMeta(id: string): Promise<ScanMeta | null> {
 }
 
 export async function getScanMeta(id: string): Promise<ScanMeta> {
+  scanDir(id); // refuse a malformed id before any read starts
   const active = jobs.get(id);
   if (active) return makeMeta(active);
   const meta = await readPersistedMeta(id);
@@ -1013,6 +1045,9 @@ interface ScanStore {
 }
 
 export async function getScanStore(id: string): Promise<ScanStore> {
+  // Validate first: a throw while building the Promise.all below would leave
+  // the first read rejecting unhandled, and the crash handler exits on that.
+  scanDir(id);
   const active = jobs.get(id);
   if (active) {
     return {
@@ -1079,8 +1114,19 @@ export function loadDirsMap(id: string): Promise<Map<string, ScanNode>> {
   if (pending) return pending;
   const load = (async () => {
     try {
-      const list = await readJsonFile<ScanNode[]>(dirsPath(id), []);
-      const map = new Map(list.map((node) => [node.path, node]));
+      const map = new Map<string, ScanNode>();
+      const stream = fs.createReadStream(dirsPath(id), "utf8");
+      const lines = readline.createInterface({ input: stream, crlfDelay: Infinity });
+      try {
+        for await (const line of lines) {
+          if (!line) continue;
+          const node = JSON.parse(line) as ScanNode;
+          map.set(node.path, node);
+        }
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        for (const node of await readJsonFile<ScanNode[]>(legacyDirsPath(id), [])) map.set(node.path, node);
+      }
       cacheDirsForScan(id, map);
       return map;
     } finally {

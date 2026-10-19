@@ -157,6 +157,8 @@ export interface CleanupSuggestion {
   size: number;
   reason: string;
   category: CleanupCategory;
+  /** Rebuildable output or a known cache: pre-selected for Trash. Others are shown for review only. */
+  safe?: boolean;
 }
 
 export interface CleanupResponse {

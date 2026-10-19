@@ -98,7 +98,17 @@ export function findProjectRoot(startDir: string): string {
 
 export const PROJECT_ROOT = findProjectRoot(__dirname);
 
+const SCAN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Every scan file path is built here, from ids that arrive over the API and
+ * MCP. Scan ids are UUIDs; anything else ("../../x") would reach outside the
+ * scan store, so it is refused as an unknown scan.
+ */
 export function scanDir(id: string): string {
+  if (typeof id !== "string" || !SCAN_ID.test(id)) {
+    throw Object.assign(new Error("Scan not found"), { statusCode: 404 });
+  }
   return path.join(SCAN_ROOT, id);
 }
 
@@ -112,8 +122,36 @@ export function ownerPath(id: string): string {
   return path.join(scanDir(id), "owner.json");
 }
 
+// One directory node per line. It used to be a single JSON array, which a
+// scan with millions of folders could not save: JSON.stringify ran past V8's
+// maximum string length, so dirs.json was never written and folder sizes were
+// lost on the next start.
 export function dirsPath(id: string): string {
+  return path.join(scanDir(id), "dirs.ndjson");
+}
+
+/** Pre-NDJSON scans; still read when dirs.ndjson is missing. */
+export function legacyDirsPath(id: string): string {
   return path.join(scanDir(id), "dirs.json");
+}
+
+/** Streams `items` to `target` as NDJSON via a temp file, so no single string holds them all. */
+export async function writeNdjsonAtomic<T>(target: string, items: Iterable<T>): Promise<void> {
+  const tmp = `${target}.${process.pid}.${crypto.randomUUID()}.tmp`;
+  const out = fs.createWriteStream(tmp, "utf8");
+  const failed = new Promise<never>((_resolve, reject) => out.on("error", reject));
+  const drained = () => Promise.race([new Promise<void>((resolve) => out.once("drain", () => resolve())), failed]);
+  let chunk: string[] = [];
+  for (const item of items) {
+    chunk.push(`${JSON.stringify(item)}\n`);
+    if (chunk.length >= 2000) {
+      if (!out.write(chunk.join(""))) await drained();
+      chunk = [];
+    }
+  }
+  if (chunk.length) out.write(chunk.join(""));
+  await Promise.race([new Promise<void>((resolve) => out.end(() => resolve())), failed]);
+  await fsp.rename(tmp, target);
 }
 
 export function errorsPath(id: string): string {

@@ -1,13 +1,20 @@
 import fs from "fs";
 import fsp from "fs/promises";
+import os from "os";
 import path from "path";
 import readline from "readline";
 import crypto from "crypto";
+import { execFile } from "child_process";
 import type { CleanupResponse, CleanupSuggestion, ScanNode } from "../shared/types";
 import { nodesPath } from "./fs-utils";
 import { trashedFilter } from "./trashed";
 import { classifyFileName } from "./file-classify";
 import { getScanMeta, getScanStore, loadDirsMap } from "./scan-engine";
+
+// Everything here is a suggestion the UI can move to Trash in one click, so
+// it errs towards missing things rather than offering something that cannot
+// be rebuilt. Only `safe` suggestions (rebuildable output, known caches) are
+// pre-selected; duplicates, archives and logs are offered for review.
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
@@ -16,31 +23,70 @@ const DUPLICATE_MIN_BYTES = 1024 * 1024;
 const MAX_AGGREGATE_PATHS = 2000;
 const MAX_SUGGESTIONS = 100;
 const MAX_DUPLICATE_GROUPS_TO_VERIFY = 40;
-const SAMPLE_CHUNK = 64 * 1024;
+/** Duplicates are confirmed by hashing whole files; stop once this much has been read. */
+const MAX_DUPLICATE_BYTES_TO_HASH = 8 * 1024 * 1024 * 1024;
 
-interface CacheDirRule {
+const HOME = os.homedir();
+
+/** Project output that the project's own tooling recreates. */
+interface ProjectOutputRule {
   names: string[];
   reason: string;
-  /** Sibling files/dirs, any of which must exist for the rule to apply. Empty = no marker needed. */
+  /** Files next to the folder, any of which marks it as a project. */
   markers: string[];
-  /** Only suggest when the directory hasn't changed for 30 days. */
-  ageGated: boolean;
+  /** The folder must be git-ignored: names like build/ or dist/ are also used for real sources and assets. */
+  requireGitIgnored: boolean;
 }
 
-const CACHE_DIR_RULES: CacheDirRule[] = [
-  { names: ["node_modules"], reason: "Rebuildable · npm install", markers: ["package.json"], ageGated: true },
-  { names: ["target"], reason: "Rebuildable · build output", markers: ["Cargo.toml", "pom.xml"], ageGated: true },
+const PROJECT_OUTPUT_RULES: ProjectOutputRule[] = [
+  { names: ["node_modules"], reason: "Rebuildable · npm install", markers: ["package.json"], requireGitIgnored: false },
+  { names: [".next", ".nuxt"], reason: "Rebuildable · build output", markers: ["package.json"], requireGitIgnored: false },
+  { names: ["target"], reason: "Rebuildable · build output", markers: ["Cargo.toml", "pom.xml"], requireGitIgnored: false },
   {
-    names: ["build", "dist", "out", ".next", ".nuxt"],
+    names: ["build", "dist", "out"],
     reason: "Rebuildable · build output",
     markers: ["package.json", "CMakeLists.txt", "Makefile", "pyproject.toml", "build.gradle", "settings.gradle"],
-    ageGated: true
-  },
-  { names: ["CoreSimulator"], reason: "Unused simulator runtimes", markers: [], ageGated: true },
-  { names: ["DerivedData", ".gradle", ".cache"], reason: "Cache · safe to delete", markers: [], ageGated: false }
+    requireGitIgnored: true
+  }
 ];
 
-const COPY_NAME_PATTERN = /^(.*?)(?: copy\d*| \(\d+\))$/i;
+/** Tool caches, by exact location: each is recreated on demand by its tool. */
+const KNOWN_CACHES: Array<{ path: string; reason: string }> = [
+  { path: path.join(HOME, "Library", "Developer", "Xcode", "DerivedData"), reason: "Xcode cache · rebuilt on next build" },
+  { path: path.join(HOME, ".gradle", "caches"), reason: "Gradle cache · downloaded again" },
+  { path: path.join(HOME, ".npm", "_cacache"), reason: "npm cache · downloaded again" },
+  { path: path.join(HOME, "Library", "Caches", "Homebrew"), reason: "Homebrew cache · downloaded again" },
+  { path: path.join(HOME, "Library", "Caches", "pip"), reason: "pip cache · downloaded again" },
+  { path: path.join(HOME, ".cache", "pip"), reason: "pip cache · downloaded again" }
+];
+
+/** Synced folders: trashing a file there deletes it on every device. */
+const CLOUD_FOLDER = /^(Dropbox|Google Drive|OneDrive.*|iCloud Drive.*|Box|Box Sync|pCloud Drive|MEGA)$/i;
+
+function isInsideOrEqual(target: string, dir: string): boolean {
+  return target === dir || target.startsWith(dir.endsWith(path.sep) ? dir : dir + path.sep);
+}
+
+/**
+ * True for paths in the user's own files: inside the home folder, but not in
+ * ~/Library or AppData (app data and settings), hidden folders (tool installs
+ * such as ~/.nvm or ~/.vscode), app bundles, or cloud-synced folders. Only the
+ * folders above `target` are checked, so `.next` itself can still match.
+ */
+function isUserArea(target: string): boolean {
+  if (!isInsideOrEqual(target, HOME) || target === HOME) return false;
+  const above = path.relative(HOME, target).split(path.sep).slice(0, -1);
+  if (above[0] === "Library" || above[0] === "AppData" || above[0] === "Applications") return false;
+  return !above.some((part) => part.startsWith(".") || part.endsWith(".app") || part === "node_modules" || CLOUD_FOLDER.test(part));
+}
+
+const LOGS_DIR = path.join(HOME, "Library", "Logs");
+
+/** Old logs: the user area or ~/Library/Logs, never a database's write-ahead log. */
+function isSafeLogPath(target: string): boolean {
+  if (/[\\/](leveldb|IndexedDB|Local Storage|Session Storage)[\\/]/i.test(target)) return false;
+  return isUserArea(target) || isInsideOrEqual(target, LOGS_DIR);
+}
 
 function isUnderGit(nodePath: string): boolean {
   return nodePath.includes(`${path.sep}.git${path.sep}`) || nodePath.endsWith(`${path.sep}.git`);
@@ -73,6 +119,10 @@ function suggestionId(seed: string): string {
   return crypto.createHash("sha1").update(seed).digest("hex").slice(0, 16);
 }
 
+function displayPath(target: string): string {
+  return isInsideOrEqual(target, HOME) ? `~${target.slice(HOME.length)}` : target;
+}
+
 async function pathExists(target: string): Promise<boolean> {
   try {
     await fsp.access(target);
@@ -88,26 +138,19 @@ async function anyMarkerExists(parentDir: string, markers: string[]): Promise<bo
   return checks.some(Boolean);
 }
 
-/** SHA-1 over the first and last 64KB — cheap, order-of-magnitude-confident duplicate confirmation. */
-async function sampleHash(filePath: string, size: number): Promise<string | null> {
+/** `git check-ignore`: true only when the folder sits in a git repo that ignores it. */
+function isGitIgnored(dir: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    execFile("git", ["-C", path.dirname(dir), "check-ignore", "-q", dir], { timeout: 5000 }, (error) => resolve(!error));
+  });
+}
+
+/** SHA-1 of the whole file. Sampling the ends called different files with equal headers (disk images, archives) duplicates. */
+async function fullHash(filePath: string): Promise<string | null> {
   try {
-    const handle = await fsp.open(filePath, "r");
-    try {
-      const hash = crypto.createHash("sha1");
-      const headLength = Math.min(SAMPLE_CHUNK, size);
-      const head = Buffer.alloc(headLength);
-      await handle.read(head, 0, headLength, 0);
-      hash.update(head);
-      if (size > SAMPLE_CHUNK) {
-        const tailLength = Math.min(SAMPLE_CHUNK, size - SAMPLE_CHUNK);
-        const tail = Buffer.alloc(tailLength);
-        await handle.read(tail, 0, tailLength, size - tailLength);
-        hash.update(tail);
-      }
-      return hash.digest("hex");
-    } finally {
-      await handle.close();
-    }
+    const hash = crypto.createHash("sha1");
+    for await (const chunk of fs.createReadStream(filePath)) hash.update(chunk as Buffer);
+    return hash.digest("hex");
   } catch {
     return null;
   }
@@ -119,56 +162,78 @@ async function loadDirNodes(id: string): Promise<ScanNode[]> {
   return Array.from((await loadDirsMap(id)).values());
 }
 
-async function findCacheDirSuggestions(dirs: ScanNode[]): Promise<CleanupSuggestion[]> {
+/**
+ * Newest modification time anywhere below each candidate folder (by folder
+ * mtimes). A folder's own mtime only changes when its direct entries do, so a
+ * node_modules used daily could still look 30 days old.
+ */
+function newestInside(dirs: ScanNode[], candidates: Set<string>): Map<string, number> {
+  const newest = new Map<string, number>();
+  if (!candidates.size) return newest;
+  for (const dir of dirs) {
+    const modifiedAt = dir.modifiedAt || 0;
+    for (let current = dir.path; ; ) {
+      if (candidates.has(current) && modifiedAt > (newest.get(current) || 0)) newest.set(current, modifiedAt);
+      const parent = path.dirname(current);
+      if (parent === current) break;
+      current = parent;
+    }
+  }
+  return newest;
+}
+
+async function findProjectOutputSuggestions(dirs: ScanNode[]): Promise<CleanupSuggestion[]> {
   const sortedByDepth = [...dirs].sort((a, b) => a.path.length - b.path.length);
-  const matchedPaths = new Set<string>();
-  const isNestedInMatched = makeAncestorChecker(matchedPaths);
-  const suggestions: CleanupSuggestion[] = [];
-  const now = Date.now();
+  const matched = new Set<string>();
+  const isNestedInMatched = makeAncestorChecker(matched);
+  const candidates: Array<{ dir: ScanNode; rule: ProjectOutputRule }> = [];
 
   for (const dir of sortedByDepth) {
-    if (!dir.size || isUnderGit(dir.path)) continue;
+    if (!dir.size || isUnderGit(dir.path) || !isUserArea(dir.path)) continue;
     // Depth-sorted iteration guarantees ancestors were processed first.
     if (isNestedInMatched(dir.path)) continue;
-
-    const rule = CACHE_DIR_RULES.find((candidate) => candidate.names.includes(dir.name));
+    const rule = PROJECT_OUTPUT_RULES.find((candidate) => candidate.names.includes(dir.name));
     if (!rule) continue;
-    if (rule.ageGated && dir.modifiedAt && now - dir.modifiedAt < THIRTY_DAYS_MS) continue;
     if (!(await anyMarkerExists(path.dirname(dir.path), rule.markers))) continue;
+    if (rule.requireGitIgnored && !(await isGitIgnored(dir.path))) continue;
+    matched.add(dir.path);
+    candidates.push({ dir, rule });
+  }
 
-    matchedPaths.add(dir.path);
-    suggestions.push({
+  const newest = newestInside(dirs, new Set(candidates.map((item) => item.dir.path)));
+  const now = Date.now();
+  return candidates
+    .filter(({ dir }) => {
+      const modifiedAt = newest.get(dir.path) || dir.modifiedAt;
+      return Boolean(modifiedAt) && now - (modifiedAt as number) >= THIRTY_DAYS_MS;
+    })
+    .map(({ dir, rule }) => ({
       id: suggestionId(`cache:${dir.path}`),
       name: dir.name,
       path: dir.path,
       paths: [dir.path],
       size: dir.size,
       reason: rule.reason,
-      category: "cache"
-    });
-  }
-
-  return suggestions;
+      category: "cache" as const,
+      safe: true
+    }));
 }
 
-/** "china holidays copy" next to "china holidays" → duplicate folder. */
-function findCopyNamedDirSuggestions(dirs: ScanNode[], excluded: (p: string) => boolean): CleanupSuggestion[] {
+function findKnownCacheSuggestions(dirs: ScanNode[]): CleanupSuggestion[] {
   const byPath = new Map(dirs.map((dir) => [dir.path, dir]));
   const suggestions: CleanupSuggestion[] = [];
-  for (const dir of dirs) {
-    if (dir.size < DUPLICATE_MIN_BYTES || excluded(dir.path) || isUnderGit(dir.path)) continue;
-    const match = dir.name.match(COPY_NAME_PATTERN);
-    if (!match || !match[1]) continue;
-    const original = byPath.get(path.join(path.dirname(dir.path), match[1]));
-    if (!original || original.kind !== "directory") continue;
+  for (const cache of KNOWN_CACHES) {
+    const dir = byPath.get(cache.path);
+    if (!dir || !dir.size) continue;
     suggestions.push({
-      id: suggestionId(`dupdir:${dir.path}`),
+      id: suggestionId(`known:${cache.path}`),
       name: dir.name,
       path: dir.path,
       paths: [dir.path],
       size: dir.size,
-      reason: "Duplicate folder",
-      category: "duplicate"
+      reason: cache.reason,
+      category: "cache",
+      safe: true
     });
   }
   return suggestions;
@@ -178,9 +243,14 @@ interface DuplicateCandidate {
   name: string;
   path: string;
   size: number;
+  modifiedAt: number | null;
 }
 
-/** name+size match is only a hint; confirm with content samples before suggesting. */
+/**
+ * Same name and size is only a hint; whole-file hashes decide. The copy kept
+ * is the oldest one (then the shortest path), and the suggestion names it in
+ * full so the user can see what stays.
+ */
 async function findVerifiedFileDuplicates(candidates: DuplicateCandidate[]): Promise<CleanupSuggestion[]> {
   const byIdentity = new Map<string, DuplicateCandidate[]>();
   for (const candidate of candidates) {
@@ -196,43 +266,69 @@ async function findVerifiedFileDuplicates(candidates: DuplicateCandidate[]): Pro
     .slice(0, MAX_DUPLICATE_GROUPS_TO_VERIFY);
 
   const suggestions: CleanupSuggestion[] = [];
+  let hashedBytes = 0;
   for (const group of groups) {
-    const sorted = [...group].sort((a, b) => a.path.localeCompare(b.path));
-    const original = sorted[0] as DuplicateCandidate;
-    const originalHash = await sampleHash(original.path, original.size);
-    if (!originalHash) continue;
-    for (const duplicate of sorted.slice(1)) {
-      const duplicateHash = await sampleHash(duplicate.path, duplicate.size);
-      if (duplicateHash !== originalHash) continue;
-      suggestions.push({
-        id: suggestionId(`dup:${duplicate.path}`),
-        name: duplicate.name,
-        path: duplicate.path,
-        paths: [duplicate.path],
-        size: duplicate.size,
-        reason: `Duplicate of ${path.basename(original.path)}`,
-        category: "duplicate"
-      });
+    const groupBytes = (group[0] as DuplicateCandidate).size * group.length;
+    if (hashedBytes + groupBytes > MAX_DUPLICATE_BYTES_TO_HASH) continue;
+    hashedBytes += groupBytes;
+    const byHash = new Map<string, DuplicateCandidate[]>();
+    for (const file of group) {
+      const hash = await fullHash(file.path);
+      if (!hash) continue;
+      const same = byHash.get(hash) ?? [];
+      same.push(file);
+      byHash.set(hash, same);
+    }
+    for (const same of byHash.values()) {
+      if (same.length < 2) continue;
+      const [kept, ...copies] = [...same].sort(
+        (a, b) => (a.modifiedAt || Infinity) - (b.modifiedAt || Infinity) || a.path.length - b.path.length
+      ) as [DuplicateCandidate, ...DuplicateCandidate[]];
+      for (const copy of copies) {
+        suggestions.push({
+          id: suggestionId(`dup:${copy.path}`),
+          name: copy.name,
+          path: copy.path,
+          paths: [copy.path],
+          size: copy.size,
+          reason: `Same as ${displayPath(kept.path)}`,
+          category: "duplicate",
+          safe: false
+        });
+      }
     }
   }
   return suggestions;
+}
+
+function commonParent(paths: string[]): string {
+  let common = path.dirname(paths[0] as string);
+  for (const target of paths) {
+    while (!isInsideOrEqual(target, common)) {
+      const parent = path.dirname(common);
+      if (parent === common) return common;
+      common = parent;
+    }
+  }
+  return common;
 }
 
 export async function suggestCleanup(id: string): Promise<CleanupResponse> {
   const meta = await getScanMeta(id);
   const dirs = await loadDirNodes(id);
 
-  const cacheSuggestions = await findCacheDirSuggestions(dirs);
-  const isInsideCacheDir = makeAncestorChecker(new Set(cacheSuggestions.map((item) => item.path)));
-
-  const copyDirSuggestions = findCopyNamedDirSuggestions(dirs, isInsideCacheDir);
+  const folderSuggestions = [...findKnownCacheSuggestions(dirs), ...(await findProjectOutputSuggestions(dirs))];
+  const isInsideSuggestedFolder = makeAncestorChecker(new Set(folderSuggestions.map((item) => item.path)));
+  // A known cache can sit inside a project folder suggestion or the other way round; keep the outer one.
+  const folders = folderSuggestions.filter(
+    (item) => !folderSuggestions.some((other) => other !== item && isInsideOrEqual(item.path, other.path) && item.path !== other.path)
+  );
 
   const duplicateCandidates: DuplicateCandidate[] = [];
   const archiveSuggestions: CleanupSuggestion[] = [];
   let oldLogCount = 0;
   let oldLogBytes = 0;
   const oldLogPaths: string[] = [];
-  let oldLogTruncated = false;
 
   const isTrashed = await trashedFilter(id);
   const stream = fs.createReadStream(nodesPath(id), "utf8");
@@ -246,10 +342,22 @@ export async function suggestCleanup(id: string): Promise<CleanupResponse> {
       continue;
     }
     if (!node || node.kind !== "file" || isTrashed(node.path)) continue;
-    if (isInsideCacheDir(node.path) || isUnderGit(node.path)) continue;
+    if (isInsideSuggestedFolder(node.path) || isUnderGit(node.path)) continue;
 
     const classification = classifyFileName(node.name || node.path);
+    // A file with no recorded mtime counts as new, never as old.
     const age = node.modifiedAt ? Date.now() - node.modifiedAt : 0;
+
+    if (classification.extension === "log") {
+      if (age >= NINETY_DAYS_MS && isSafeLogPath(node.path) && oldLogPaths.length < MAX_AGGREGATE_PATHS) {
+        oldLogCount += 1;
+        oldLogBytes += node.size || 0;
+        oldLogPaths.push(node.path);
+      }
+      continue;
+    }
+
+    if (!isUserArea(node.path)) continue;
 
     if (classification.type === "archives" && node.size >= LARGE_ARCHIVE_BYTES && age >= NINETY_DAYS_MS) {
       archiveSuggestions.push({
@@ -258,38 +366,32 @@ export async function suggestCleanup(id: string): Promise<CleanupResponse> {
         path: node.path,
         paths: [node.path],
         size: node.size,
-        reason: `Large archive · ${monthsAgo(node.modifiedAt)} mo old`,
-        category: "cache"
+        reason: `Large archive · ${monthsAgo(node.modifiedAt)} mo old · may be your only copy`,
+        category: "other",
+        safe: false
       });
       continue;
     }
 
-    if (classification.extension === "log" && age >= NINETY_DAYS_MS) {
-      oldLogCount += 1;
-      oldLogBytes += node.size || 0;
-      if (oldLogPaths.length < MAX_AGGREGATE_PATHS) oldLogPaths.push(node.path);
-      else oldLogTruncated = true;
-      continue;
-    }
-
     if (node.size >= DUPLICATE_MIN_BYTES) {
-      duplicateCandidates.push({ name: node.name, path: node.path, size: node.size });
+      duplicateCandidates.push({ name: node.name, path: node.path, size: node.size, modifiedAt: node.modifiedAt });
     }
   }
 
   const fileDuplicates = await findVerifiedFileDuplicates(duplicateCandidates);
 
-  const suggestions: CleanupSuggestion[] = [...cacheSuggestions, ...copyDirSuggestions, ...archiveSuggestions, ...fileDuplicates];
+  const suggestions: CleanupSuggestion[] = [...folders, ...archiveSuggestions, ...fileDuplicates];
 
   if (oldLogPaths.length > 0) {
     suggestions.push({
       id: suggestionId(`logs:${meta.rootPath}`),
-      name: `*.log (${oldLogCount} files)`,
-      path: path.dirname(oldLogPaths[0] as string),
+      name: `${oldLogCount} old .log file${oldLogCount === 1 ? "" : "s"}`,
+      path: commonParent(oldLogPaths),
       paths: oldLogPaths,
       size: oldLogBytes,
-      reason: oldLogTruncated ? `Old logs · 90+ days (first ${oldLogPaths.length})` : "Old logs · 90+ days",
-      category: "cache"
+      reason: "Old logs · 90+ days",
+      category: "other",
+      safe: false
     });
   }
 

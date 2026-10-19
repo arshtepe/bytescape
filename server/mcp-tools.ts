@@ -192,6 +192,7 @@ const tools: Tool[] = [
         suggestions: result.suggestions.map((item) => ({
           name: item.name,
           category: item.category,
+          safeToDelete: Boolean(item.safe),
           reason: item.reason,
           size: human(item.size),
           bytes: item.size,

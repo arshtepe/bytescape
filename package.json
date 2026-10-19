@@ -74,7 +74,8 @@
             "x64"
           ]
         }
-      ]
+      ],
+      "artifactName": "${productName}-${version}.${ext}"
     },
     "mac": {
       "icon": "build/icon.icns",
@@ -88,7 +89,8 @@
       "target": [
         "AppImage",
         "tar.gz"
-      ]
+      ],
+      "category": "Utility"
     }
   }
 }
