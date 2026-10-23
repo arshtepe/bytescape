@@ -2,6 +2,11 @@
   <img src="assets/hero.svg" alt="Bytescape: a treemap of folders; one tile is moved to Trash and the rest re-flow while the total drops" width="880">
 </p>
 
+<p align="center">
+  <a href="https://github.com/arshtepe/bytescape/releases/latest"><img src="assets/download.svg" alt="Download Bytescape for macOS, Windows and Linux" width="360"></a>
+</p>
+<p align="center"><sub>macOS (Apple Silicon) · Windows (x64) · Linux (x64) · <a href="#download">install notes</a></sub></p>
+
 # Bytescape
 
 See what is eating your disk, and clean it up safely. Bytescape scans a folder or a whole drive, draws it as a treemap, and lets you send the big stuff to Trash without leaving the app.
