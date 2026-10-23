@@ -3,15 +3,13 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/arshtepe/bytescape/releases/latest"><img src="assets/download.svg" alt="Download Bytescape for macOS, Windows and Linux" width="360"></a>
+  <a href="https://github.com/arshtepe/bytescape/releases/download/v1.1.0/Bytescape-1.1.0-arm64.dmg"><img src="assets/download-macos.svg" alt="Download for macOS (Apple Silicon, .dmg)" width="230"></a>
+  <a href="https://github.com/arshtepe/bytescape/releases/download/v1.1.0/Bytescape-1.1.0.exe"><img src="assets/download-windows.svg" alt="Download for Windows (x64, portable .exe)" width="230"></a>
+  <a href="https://github.com/arshtepe/bytescape/releases/download/v1.1.0/Bytescape-1.1.0.AppImage"><img src="assets/download-linux.svg" alt="Download for Linux (x64, AppImage)" width="230"></a>
 </p>
 <p align="center">
-  <b>Direct download (v1.1.0):</b>
-  <a href="https://github.com/arshtepe/bytescape/releases/download/v1.1.0/Bytescape-1.1.0-arm64.dmg">macOS (Apple Silicon)</a> ·
-  <a href="https://github.com/arshtepe/bytescape/releases/download/v1.1.0/Bytescape-1.1.0.exe">Windows (x64)</a> ·
-  <a href="https://github.com/arshtepe/bytescape/releases/download/v1.1.0/Bytescape-1.1.0.AppImage">Linux AppImage</a> ·
-  <a href="https://github.com/arshtepe/bytescape/releases/download/v1.1.0/bytescape-1.1.0.tar.gz">Linux tar.gz</a>
-  <br><sub>Unsigned builds: see the <a href="#download">install notes</a> for the first launch.</sub>
+  <a href="https://github.com/arshtepe/bytescape/releases/latest"><img src="assets/download-all.svg" alt="All downloads and versions" width="170"></a>
+  <br><sub>v1.1.0 · unsigned builds, see the <a href="#download">install notes</a> for the first launch</sub>
 </p>
 
 # Bytescape
