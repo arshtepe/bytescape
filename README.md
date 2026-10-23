@@ -5,7 +5,14 @@
 <p align="center">
   <a href="https://github.com/arshtepe/bytescape/releases/latest"><img src="assets/download.svg" alt="Download Bytescape for macOS, Windows and Linux" width="360"></a>
 </p>
-<p align="center"><sub>macOS (Apple Silicon) · Windows (x64) · Linux (x64) · <a href="#download">install notes</a></sub></p>
+<p align="center">
+  <b>Direct download (v1.1.0):</b>
+  <a href="https://github.com/arshtepe/bytescape/releases/download/v1.1.0/Bytescape-1.1.0-arm64.dmg">macOS (Apple Silicon)</a> ·
+  <a href="https://github.com/arshtepe/bytescape/releases/download/v1.1.0/Bytescape-1.1.0.exe">Windows (x64)</a> ·
+  <a href="https://github.com/arshtepe/bytescape/releases/download/v1.1.0/Bytescape-1.1.0.AppImage">Linux AppImage</a> ·
+  <a href="https://github.com/arshtepe/bytescape/releases/download/v1.1.0/bytescape-1.1.0.tar.gz">Linux tar.gz</a>
+  <br><sub>Unsigned builds: see the <a href="#download">install notes</a> for the first launch.</sub>
+</p>
 
 # Bytescape
 
@@ -22,13 +29,13 @@ See what is eating your disk, and clean it up safely. Bytescape scans a folder o
 
 ## Download
 
-Get the latest build from [Releases](https://github.com/arshtepe/bytescape/releases):
+Download the current version (1.1.0) directly, or browse all versions on [Releases](https://github.com/arshtepe/bytescape/releases):
 
-| Platform | File |
+| Platform | Download |
 | --- | --- |
-| macOS (Apple Silicon) | `Bytescape-<version>-arm64.dmg` |
-| Windows (x64) | `Bytescape-<version>.exe` (portable, no install) |
-| Linux (x64) | `Bytescape-<version>.AppImage` or `.tar.gz` |
+| macOS (Apple Silicon) | [Bytescape-1.1.0-arm64.dmg](https://github.com/arshtepe/bytescape/releases/download/v1.1.0/Bytescape-1.1.0-arm64.dmg) or [.zip](https://github.com/arshtepe/bytescape/releases/download/v1.1.0/Bytescape-1.1.0-arm64-mac.zip) |
+| Windows (x64) | [Bytescape-1.1.0.exe](https://github.com/arshtepe/bytescape/releases/download/v1.1.0/Bytescape-1.1.0.exe) (portable, no install) |
+| Linux (x64) | [Bytescape-1.1.0.AppImage](https://github.com/arshtepe/bytescape/releases/download/v1.1.0/Bytescape-1.1.0.AppImage) or [bytescape-1.1.0.tar.gz](https://github.com/arshtepe/bytescape/releases/download/v1.1.0/bytescape-1.1.0.tar.gz) |
 
 The builds are not signed yet:
 
