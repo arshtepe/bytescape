@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="assets/hero.svg" alt="Bytescape: a treemap of folders; one tile is moved to Trash and the rest re-flow while the total drops" width="880">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/analyze-dark.png">
+    <img src="assets/screenshots/analyze-light.png" alt="Bytescape showing a 352 GB drive as a treemap: Movies, Library and Applications are the largest folders, with 32.5 GB suggested for cleanup" width="880">
+  </picture>
 </p>
 
 <p align="center">
@@ -24,6 +27,27 @@ See what is eating your disk, and clean it up safely. Bytescape scans a folder o
 - **Breakdown by file type.** Find every video, disk image or archive across the scan.
 - **For agents.** An optional read-only MCP endpoint lets AI tools ask what is using your space.
 - **Private.** Everything runs locally. Scanning is read-only, and nothing about your files leaves your machine. Saved scan data is deleted a day after the scan by default (or on quit, or after 3 or 7 days).
+
+<table>
+  <tr>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/cleanup-dark.png">
+        <img src="assets/screenshots/cleanup-light.png" alt="Cleanup screen: Xcode, Gradle, Homebrew and npm caches and old node_modules are selected; a duplicate video, old archives and logs are listed for review">
+      </picture>
+    </td>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/simple-dark.png">
+        <img src="assets/screenshots/simple-light.png" alt="Simple mode: the biggest folders as a list, with Open and Copy path buttons">
+      </picture>
+    </td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Cleanup: safe items pre-selected, the rest for review</sub></td>
+    <td align="center"><sub>Simple mode: biggest folders first, open or copy any path</sub></td>
+  </tr>
+</table>
 
 ## Download
 
