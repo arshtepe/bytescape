@@ -1,11 +1,12 @@
 import { useState } from "react";
-import type { ScanMeta, StorageSettings } from "../../shared/types";
+import type { KeepScans, ScanMeta, StorageSettings } from "../../shared/types";
 import { formatBytes } from "../format";
 
 interface ScansScreenProps {
   scans: ScanMeta[];
   storage: StorageSettings | null;
   onChangeStorage: () => void;
+  onKeepScansChange: (value: KeepScans) => void;
   onOpen: (scan: ScanMeta) => void;
   onDelete: (ids: string[]) => Promise<void>;
   onNewScan: () => void;
@@ -18,7 +19,15 @@ const STATUS_LABELS: Record<ScanMeta["status"], string> = {
   failed: "Failed"
 };
 
-export function ScansScreen({ scans, storage, onChangeStorage, onOpen, onDelete, onNewScan }: ScansScreenProps) {
+const KEEP_OPTIONS: Array<{ value: KeepScans; label: string }> = [
+  { value: "quit", label: "when I quit Bytescape" },
+  { value: "1d", label: "1 day after the scan" },
+  { value: "3d", label: "3 days after the scan" },
+  { value: "7d", label: "7 days after the scan" },
+  { value: "next", label: "only when I start a new scan" }
+];
+
+export function ScansScreen({ scans, storage, onChangeStorage, onKeepScansChange, onOpen, onDelete, onNewScan }: ScansScreenProps) {
   const [deleting, setDeleting] = useState<Set<string>>(new Set());
   // Only the latest scan is worth showing: starting a scan removes older
   // ones, so anything else here is left over from a run that got stuck or
@@ -51,7 +60,7 @@ export function ScansScreen({ scans, storage, onChangeStorage, onOpen, onDelete,
       <div className="scans-header">
         <div>
           <div className="screen-title">Last scan</div>
-          <div className="screen-sub">Reopen it instantly. Starting a new scan replaces it.</div>
+          <div className="screen-sub">Reopen it instantly. Starting a new scan replaces it, and it is deleted on the schedule below.</div>
         </div>
         <button type="button" className="btn-primary" onClick={onNewScan}>
           <PlusIcon /> New scan
@@ -60,12 +69,29 @@ export function ScansScreen({ scans, storage, onChangeStorage, onOpen, onDelete,
       {storage ? (
         <div className="scans-storage">
           <span>
-            Scan data: <span className="mono">{storage.scanRoot}</span> · {formatBytes(storage.freeBytes)} free
+            Scan data: <span className="mono">{storage.scanRoot}</span>
+            {storage.storeBytes > 0 ? <> · uses about {formatBytes(storage.storeBytes)}</> : null} · {formatBytes(storage.freeBytes)} free
           </span>
           <button type="button" className="btn-ghost" onClick={onChangeStorage}>
             Change…
           </button>
         </div>
+      ) : null}
+      {storage ? (
+        <label className="scans-storage scans-retention">
+          <span>Delete saved scan data</span>
+          <select
+            className="scans-retention-select"
+            value={storage.keepScans}
+            onChange={(event) => onKeepScansChange(event.target.value as KeepScans)}
+          >
+            {KEEP_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
       ) : null}
       <div className="scans-list">
         {latest.map((scan) => (

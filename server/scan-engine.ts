@@ -4,8 +4,10 @@ import os from "os";
 import path from "path";
 import crypto from "crypto";
 import readline from "readline";
+import { spawn } from "child_process";
 import { Worker } from "worker_threads";
 import type {
+  KeepScans,
   ScanError,
   ScanMeta,
   ScanNode,
@@ -20,7 +22,9 @@ import {
   childrenPath,
   childrenRoot,
   clampInt,
+  CRASH_ROOT,
   dirsPath,
+  getKeepScans,
   legacyDirsPath,
   writeNdjsonAtomic,
   DEFAULT_SCAN_ROOT,
@@ -156,7 +160,12 @@ function makeNode(absPath: string, parentPath: string, stats: { size: number; mt
   };
 }
 
+// Scans removed while their job still runs (deleteScansForQuit): the final
+// snapshot must not mkdir the store back into existence.
+const discardedScans = new Set<string>();
+
 async function writeSnapshot(job: ScanJob, options: { includeDirs?: boolean } = {}): Promise<void> {
+  if (discardedScans.has(job.id)) return;
   await fsp.mkdir(scanDir(job.id), { recursive: true });
   const writes: Array<[string, unknown]> = [
     [snapshotPath(job.id), makeMeta(job)],
@@ -936,8 +945,123 @@ export async function sweepDeletedScans(): Promise<void> {
   }
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+const KEEP_DAYS: Partial<Record<KeepScans, number>> = { "1d": 1, "3d": 3, "7d": 7 };
+const CRASH_REPORTS_KEPT = 20;
+const CRASH_REPORT_MAX_AGE_MS = 14 * DAY_MS;
+
+/**
+ * Retention for everything under SCAN_ROOT. A full-drive scan store is
+ * gigabytes and a million files, and it used to sit there until the next
+ * scan, however long that took. Runs at startup and then hourly:
+ * - scans older than the newest one (left by a crash or an interrupted run) go;
+ * - the newest one goes once it is older than the keepScans setting; with
+ *   "quit", a scan from an earlier session goes at startup (deleteScansForQuit
+ *   is the normal path; this covers a crash or a forced quit);
+ * - crash reports past the newest 20, or older than 14 days, go;
+ * - half-deleted stores (.deleting-*) are finished off.
+ * Returns the ids of the scans it deleted.
+ */
+export async function pruneScanData(options: { startup?: boolean } = {}): Promise<string[]> {
+  const keep = getKeepScans();
+  const maxAgeMs = (KEEP_DAYS[keep] ?? Infinity) * DAY_MS;
+  const now = Date.now();
+  const removed: string[] = [];
+  const scans = await listScans().catch(() => []);
+  for (const [index, scan] of scans.entries()) {
+    if (scan.status === "running" || jobs.has(scan.id)) continue;
+    const settledAt = Date.parse(scan.finishedAt || scan.startedAt) || now;
+    const expired =
+      index > 0 || now - settledAt > maxAgeMs || (keep === "quit" && options.startup === true);
+    if (!expired) continue;
+    try {
+      await deleteScan(scan.id);
+      removed.push(scan.id);
+    } catch (error) {
+      console.error(`Failed to delete scan ${scan.id}: ${(error as Error).message}`);
+    }
+  }
+  await pruneCrashReports(now);
+  await sweepDeletedScans();
+  return removed;
+}
+
+async function pruneCrashReports(now: number): Promise<void> {
+  const names = await fsp.readdir(CRASH_ROOT).catch(() => [] as string[]);
+  const reports = await Promise.all(
+    names
+      .filter((name) => name.endsWith(".json"))
+      .map(async (name) => {
+        const file = path.join(CRASH_ROOT, name);
+        const stats = await fsp.stat(file).catch(() => null);
+        return { file, mtimeMs: stats?.mtimeMs ?? 0 };
+      })
+  );
+  reports.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  for (const [index, report] of reports.entries()) {
+    if (index < CRASH_REPORTS_KEPT && now - report.mtimeMs <= CRASH_REPORT_MAX_AGE_MS) continue;
+    await fsp.rm(report.file, { force: true }).catch(() => {});
+  }
+}
+
+/**
+ * keepScans "quit": called while the app quits. Each scan this process can
+ * delete is renamed out of the listing (instant), and the removal goes to a
+ * detached OS process, because a worker thread would die with the app and a
+ * big store takes minutes to delete. Whatever it misses, the next start
+ * sweeps (pruneScanData).
+ */
+export async function deleteScansForQuit(): Promise<void> {
+  if (getKeepScans() !== "quit") return;
+  // Our own running scans stop here anyway; abort them so nothing writes
+  // into a store that is being removed.
+  for (const job of jobs.values()) {
+    discardedScans.add(job.id);
+    job.cancelled = true;
+    job.abort?.();
+  }
+  const targets: string[] = [];
+  for (const scan of await listScans().catch(() => [])) {
+    // A scan running in another process (a second app instance) is theirs.
+    if (scan.status === "running" && !jobs.has(scan.id)) continue;
+    const target = path.join(SCAN_ROOT, `${DELETING_PREFIX}${scan.id}`);
+    try {
+      await fsp.rename(scanDir(scan.id), target);
+      targets.push(target);
+    } catch (error) {
+      console.error(`Failed to delete scan ${scan.id}: ${(error as Error).message}`);
+    }
+  }
+  const entries = await fsp.readdir(SCAN_ROOT, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    const target = path.join(SCAN_ROOT, entry.name);
+    if (entry.isDirectory() && entry.name.startsWith(DELETING_PREFIX) && !targets.includes(target)) targets.push(target);
+  }
+  if (targets.length) removeDetached(targets);
+}
+
+function removeDetached(targets: string[]): void {
+  const options = { detached: true, stdio: "ignore" as const, windowsHide: true };
+  try {
+    if (process.platform === "win32") {
+      for (const target of targets) spawn("cmd.exe", ["/d", "/c", "rd", "/s", "/q", target], options).unref();
+    } else {
+      spawn("rm", ["-rf", "--", ...targets], options).unref();
+    }
+  } catch (error) {
+    console.error(`Failed to start scan data removal: ${(error as Error).message}`);
+  }
+}
+
 export async function getStorageSettings(): Promise<StorageSettings> {
-  return { scanRoot: SCAN_ROOT, defaultScanRoot: DEFAULT_SCAN_ROOT, freeBytes: await freeBytes(SCAN_ROOT) };
+  const scans = await listScans().catch(() => []);
+  return {
+    scanRoot: SCAN_ROOT,
+    defaultScanRoot: DEFAULT_SCAN_ROOT,
+    freeBytes: await freeBytes(SCAN_ROOT),
+    keepScans: getKeepScans(),
+    storeBytes: scans.reduce((sum, scan) => sum + estimateStoreBytes(scan), 0)
+  };
 }
 
 /**

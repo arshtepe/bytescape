@@ -1,11 +1,33 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { RootChoice, ScanError, ScanMeta, ScanNode, TrashJob } from "../../shared/types";
 import * as api from "../api";
+import { copyText } from "../clipboard";
 import { formatBytes, paletteColor } from "../format";
 import type { Mode } from "../theme";
 import { Treemap } from "../components/Treemap";
 
 const SIMPLE_SCAN_PARAMS = { maxDepth: 40, includeHidden: true };
+
+const PLATFORM = typeof navigator === "undefined" ? "" : navigator.userAgent;
+const FILE_MANAGER = /Mac/i.test(PLATFORM) ? "Finder" : /Windows/i.test(PLATFORM) ? "Explorer" : "file manager";
+
+/** Copy-path state with a short "Copied" confirmation per path. */
+function useCopyPath(): [string | null, (path: string) => void] {
+  const [copied, setCopied] = useState<string | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+  }, []);
+  const copy = (path: string) => {
+    void copyText(path).then((ok) => {
+      if (!ok) return;
+      setCopied(path);
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = setTimeout(() => setCopied(null), 1500);
+    });
+  };
+  return [copied, copy];
+}
 
 interface StackEntry {
   name: string;
@@ -517,6 +539,7 @@ function DetailPanel({
   onGoCleanup: () => void;
 }) {
   const rows = folderItems.slice(0, 12);
+  const [copiedPath, copyPath] = useCopyPath();
   return (
     <div className="detail-panel">
       <div className="detail-panel-header">
@@ -533,9 +556,17 @@ function DetailPanel({
             type="button"
             className="btn-secondary"
             style={{ flex: 1 }}
-            onClick={() => node && navigator.clipboard.writeText(node.path)}
+            onClick={() => node && copyPath(node.path)}
           >
-            <CopyIcon /> Copy path
+            {node && copiedPath === node.path ? (
+              <>
+                <CheckIcon /> Copied
+              </>
+            ) : (
+              <>
+                <CopyIcon /> Copy path
+              </>
+            )}
           </button>
         </div>
       </div>
@@ -642,6 +673,7 @@ function SimpleView({
   const top = folderItems.slice(0, 8);
   const max = top.length ? Math.max(...top.map((item) => item.size || 0), 1) : 1;
   const biggest = top[0];
+  const [copiedPath, copyPath] = useCopyPath();
 
   return (
     <div className={`simple-view ${folderLoading ? "folder-loading" : ""}`}>
@@ -671,6 +703,20 @@ function SimpleView({
         <div style={{ display: "flex", gap: 16 }}>
           <div className="card">
             <div style={{ fontSize: 12.5, color: "var(--fg-2)" }}>This folder</div>
+            {node ? (
+              <div className="simple-folder-path">
+                <span className="mono simple-folder-path-text" title={node.path}>
+                  {/* rtl on the box clips the start of a long path; bdi keeps the path itself in order */}
+                  <bdi dir="ltr">{node.path}</bdi>
+                </span>
+                <button type="button" className="simple-path-btn" title={`Open in ${FILE_MANAGER}`} onClick={() => void api.openPath(node.path)}>
+                  <OpenIcon /> Open
+                </button>
+                <button type="button" className="simple-path-btn" title="Copy the full path" onClick={() => copyPath(node.path)}>
+                  {copiedPath === node.path ? <CheckIcon /> : <CopyIcon />} {copiedPath === node.path ? "Copied" : "Copy path"}
+                </button>
+              </div>
+            ) : null}
             <div style={{ fontSize: 34, fontWeight: 700, marginTop: 3 }}>
               {formatBytes(node?.size || 0)
                 .split(" ")
@@ -715,7 +761,7 @@ function SimpleView({
                 key={item.path}
                 className={`simple-list-row ${clickable ? "clickable" : ""}`}
                 onClick={clickable ? () => onDrill(item) : undefined}
-                title={clickable ? `${item.name} — click to open` : item.name}
+                title={item.path}
               >
                 <span className="simple-list-dot" style={{ background: paletteColor(index) }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -728,6 +774,43 @@ function SimpleView({
                   <div className="content-bar-track" style={{ height: 6, marginTop: 7 }}>
                     <div className="content-bar-fill" style={{ width: `${((item.size || 0) / max) * 100}%`, background: paletteColor(index) }} />
                   </div>
+                </div>
+                <div className="simple-row-actions">
+                  <button
+                    type="button"
+                    className="row-action-btn"
+                    title={item.kind === "directory" ? `Open folder in ${FILE_MANAGER}` : "Open file"}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void api.openPath(item.path);
+                    }}
+                  >
+                    <OpenIcon />
+                  </button>
+                  {item.kind === "directory" ? null : (
+                    <button
+                      type="button"
+                      className="row-action-btn"
+                      title={`Show in ${FILE_MANAGER}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void api.openInFolder(item.path);
+                      }}
+                    >
+                      <RevealIcon />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className={`row-action-btn ${copiedPath === item.path ? "done" : ""}`}
+                    title={copiedPath === item.path ? "Copied" : `Copy full path: ${item.path}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      copyPath(item.path);
+                    }}
+                  >
+                    {copiedPath === item.path ? <CheckIcon /> : <CopyIcon />}
+                  </button>
                 </div>
                 <button
                   type="button"
@@ -897,6 +980,24 @@ function CopyIcon() {
     <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
       <rect x={9} y={9} width={11} height={11} rx={2} />
       <path d="M5 15V5a2 2 0 0 1 2-2h10" />
+    </svg>
+  );
+}
+
+function OpenIcon() {
+  return (
+    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+      <path d="M14 4h6v6" />
+      <path d="M20 4l-9 9" />
+      <path d="M19 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4}>
+      <polyline points="20 6 9 17 4 12" />
     </svg>
   );
 }

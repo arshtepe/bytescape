@@ -206,10 +206,16 @@ export type SocketMessage =
   | { type: "scan:log"; log: LogEntry }
   | { type: "trash:update"; job: TrashJob };
 
+/** When the saved scan is deleted: on quit, N days after it finished, or only when a new scan starts. */
+export type KeepScans = "quit" | "1d" | "3d" | "7d" | "next";
+
 export interface StorageSettings {
   scanRoot: string;
   defaultScanRoot: string;
   freeBytes: number;
+  keepScans: KeepScans;
+  /** Rough disk use of the saved scans (estimated from their counts; measuring a 1M-file store is too slow). */
+  storeBytes: number;
 }
 
 export interface McpSettings {

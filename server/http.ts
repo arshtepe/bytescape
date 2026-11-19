@@ -14,6 +14,7 @@ import {
   listScans,
   makeMeta,
   nodesToFolderPayload,
+  pruneScanData,
   searchScan
 } from "./scan-engine";
 import { fileGroupsForScan, filesForGroup, topFilesForScan } from "./file-classify";
@@ -21,7 +22,17 @@ import { suggestCleanup } from "./cleanup";
 import { cancelTrash, enqueueTrash } from "./trash";
 import { pickFolder } from "./pick-folder";
 import { agentPrompt, handleMcpMessage, MCP_DISABLED_CODE, MCP_DISABLED_MESSAGE, reply, type RpcMessage } from "./mcp-tools";
-import { clampInt, getContentType, getRootChoices, isMcpEnabled, normalizeScanPath, PROJECT_ROOT, SCAN_ROOT, setMcpEnabled } from "./fs-utils";
+import {
+  clampInt,
+  getContentType,
+  getRootChoices,
+  isMcpEnabled,
+  normalizeScanPath,
+  PROJECT_ROOT,
+  SCAN_ROOT,
+  setKeepScans,
+  setMcpEnabled
+} from "./fs-utils";
 
 const DIST_DIR = path.join(PROJECT_ROOT, "dist");
 const PUBLIC_DIR = path.join(PROJECT_ROOT, "public");
@@ -101,7 +112,29 @@ function readBody(req: IncomingMessage): Promise<Record<string, unknown>> {
   });
 }
 
-async function openInFileManager(targetPath: string): Promise<{ openedPath: string; mode: "reveal" | "open" }> {
+// Opening one of these with its default handler would run it (an app, a
+// script, an installer), so "open" shows it in the file manager instead.
+const RUNNABLE_EXTENSIONS = new Set([
+  ".app", ".command", ".tool", ".sh", ".bash", ".zsh", ".csh", ".fish", ".py", ".rb", ".pl", ".js", ".mjs", ".jar",
+  ".exe", ".bat", ".cmd", ".com", ".msi", ".ps1", ".vbs", ".vbe", ".wsf", ".scr", ".lnk", ".pif", ".reg", ".hta",
+  ".appimage", ".run", ".bin", ".desktop", ".pkg", ".mpkg", ".workflow", ".scpt", ".terminal", ".url", ".webloc", ".inetloc"
+]);
+
+function isRunnable(target: string, stats: { mode: number }): boolean {
+  if (RUNNABLE_EXTENSIONS.has(path.extname(target).toLowerCase())) return true;
+  return process.platform !== "win32" && (stats.mode & 0o111) !== 0;
+}
+
+/**
+ * "reveal" shows the item in the file manager (a folder opens, a file is
+ * selected in its folder). "open" opens a folder the same way and a file in
+ * its default app, except files that would run (see RUNNABLE_EXTENSIONS),
+ * which are revealed instead.
+ */
+async function openInFileManager(
+  targetPath: string,
+  action: "open" | "reveal" = "reveal"
+): Promise<{ openedPath: string; mode: "reveal" | "open" | "launch" }> {
   const normalized = normalizeScanPath(targetPath);
   let stats;
   try {
@@ -114,19 +147,30 @@ async function openInFileManager(targetPath: string): Promise<{ openedPath: stri
   const parentDir = isDirectory ? normalized : path.dirname(normalized);
   const launch = (command: string, args: string[]) => {
     const child = spawn(command, args, { detached: true, stdio: "ignore", windowsHide: false });
+    child.on("error", (error) => console.error(`Failed to open ${normalized}: ${error.message}`));
     child.unref();
   };
 
+  // .app bundles are directories on macOS; opening one would launch it.
+  const bundle = process.platform === "darwin" && isDirectory && RUNNABLE_EXTENSIONS.has(path.extname(normalized).toLowerCase());
+  if (action === "open" && stats && !bundle && (isDirectory || !isRunnable(normalized, stats))) {
+    if (process.platform === "darwin") launch("open", [normalized]);
+    else if (process.platform === "win32") launch("explorer.exe", [normalized]);
+    else launch("xdg-open", [normalized]);
+    return { openedPath: normalized, mode: isDirectory ? "open" : "launch" };
+  }
+
+  const select = Boolean(stats && (!isDirectory || bundle));
   if (process.platform === "darwin") {
-    if (stats && !isDirectory) launch("open", ["-R", normalized]);
+    if (select) launch("open", ["-R", normalized]);
     else launch("open", [parentDir]);
-    return { openedPath: normalized, mode: stats && !isDirectory ? "reveal" : "open" };
+    return { openedPath: normalized, mode: select ? "reveal" : "open" };
   }
 
   if (process.platform === "win32") {
-    if (stats && !isDirectory) launch("explorer.exe", [`/select,${normalized}`]);
+    if (select) launch("explorer.exe", [`/select,${normalized}`]);
     else launch("explorer.exe", [parentDir]);
-    return { openedPath: normalized, mode: stats && !isDirectory ? "reveal" : "open" };
+    return { openedPath: normalized, mode: select ? "reveal" : "open" };
   }
 
   launch("xdg-open", [parentDir]);
@@ -271,13 +315,21 @@ export async function router(req: IncomingMessage, res: ServerResponse): Promise
       }
     }
 
+    if (req.method === "POST" && parsed.pathname === "/api/settings/retention") {
+      const payload = await readBody(req);
+      await setKeepScans(payload.keepScans);
+      await pruneScanData();
+      sendJson(res, 200, await getStorageSettings());
+      return;
+    }
+
     if (req.method === "POST" && parsed.pathname === "/api/open-in-folder") {
       const payload = await readBody(req);
       if (!payload.path || typeof payload.path !== "string") {
         sendJson(res, 400, { error: "Path is required" });
         return;
       }
-      sendJson(res, 200, await openInFileManager(payload.path));
+      sendJson(res, 200, await openInFileManager(payload.path, payload.action === "open" ? "open" : "reveal"));
       return;
     }
 

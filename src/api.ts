@@ -7,6 +7,7 @@ import type {
   ScanMeta,
   SearchResponse,
   McpSettings,
+  KeepScans,
   StorageSettings,
   TopFilesResponse,
   TrashResponse
@@ -77,8 +78,14 @@ export function undoTrash(jobId: string): Promise<TrashResponse> {
   return api(`/api/trash/${jobId}/undo`, { method: "POST" });
 }
 
+/** Shows the item in the file manager (a folder opens, a file is selected). */
 export function openInFolder(path: string): Promise<{ openedPath: string; mode: string }> {
   return api("/api/open-in-folder", { method: "POST", body: JSON.stringify({ path }) });
+}
+
+/** Opens a folder in the file manager or a file in its default app (files that would run are revealed instead). */
+export function openPath(path: string): Promise<{ openedPath: string; mode: string }> {
+  return api("/api/open-in-folder", { method: "POST", body: JSON.stringify({ path, action: "open" }) });
 }
 
 export function pickFolder(purpose: "scan" | "storage" = "scan"): Promise<{ path: string | null }> {
@@ -87,6 +94,10 @@ export function pickFolder(purpose: "scan" | "storage" = "scan"): Promise<{ path
 
 export function getStorage(): Promise<StorageSettings> {
   return api("/api/settings/storage");
+}
+
+export function setKeepScans(keepScans: KeepScans): Promise<StorageSettings> {
+  return api("/api/settings/retention", { method: "POST", body: JSON.stringify({ keepScans }) });
 }
 
 export function setStorage(path: string | null): Promise<StorageSettings> {

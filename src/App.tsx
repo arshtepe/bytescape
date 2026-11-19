@@ -85,6 +85,13 @@ export function App() {
     api.getStorage().then(setStorage).catch(() => {});
   }, [loadScans]);
 
+  // Disk use of saved scans changes when one finishes or is deleted (also by
+  // the retention sweep), not on every progress tick.
+  const settledScansKey = scans.map((scan) => `${scan.id}:${scan.status}`).join(",");
+  useEffect(() => {
+    api.getStorage().then(setStorage).catch(() => {});
+  }, [settledScansKey]);
+
   // A scan that stopped because its storage drive filled up: ask where to
   // save scan data instead (once per scan).
   useEffect(() => {
@@ -298,6 +305,7 @@ export function App() {
               onOpen={loadScan}
               onDelete={deleteScans}
               onChangeStorage={openStorageSettings}
+              onKeepScansChange={(value) => void api.setKeepScans(value).then(setStorage).catch(() => {})}
               onNewScan={() => setScreen("analyze")}
             />
           ) : screen === "logs" ? (

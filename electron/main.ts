@@ -115,12 +115,23 @@ app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) showWindow();
 });
 
-app.on("before-quit", async () => {
-  if (serverHandle) {
-    const handle = serverHandle;
-    serverHandle = null;
+// Electron does not wait for an async before-quit handler, so hold the quit
+// until the server has closed and, with "keep until quit", the saved scans
+// are handed off for deletion (capped so a hang never blocks quitting).
+let quitReady = false;
+app.on("before-quit", (event) => {
+  if (quitReady || !serverHandle) return;
+  event.preventDefault();
+  const handle = serverHandle;
+  serverHandle = null;
+  const cleanup = (async () => {
+    await handle.cleanupForQuit().catch((error: Error) => console.error(`Scan cleanup on quit failed: ${error.message}`));
     await handle.close().catch(() => {});
-  }
+  })();
+  void Promise.race([cleanup, new Promise((resolve) => setTimeout(resolve, 3000))]).then(() => {
+    quitReady = true;
+    app.quit();
+  });
 });
 
 app.on("window-all-closed", () => {

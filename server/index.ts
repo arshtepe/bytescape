@@ -5,7 +5,7 @@ if (!process.env.UV_THREADPOOL_SIZE) process.env.UV_THREADPOOL_SIZE = "16";
 import http from "http";
 import { WebSocketServer } from "ws";
 import { checkBrowserBoundary, router } from "./http";
-import { createScanJob, getScanStore, jobs, listScans, sweepDeletedScans } from "./scan-engine";
+import { createScanJob, deleteScansForQuit, getScanStore, jobs, listScans, pruneScanData } from "./scan-engine";
 import { installCrashHandlers } from "./crash-reporter";
 import { setSocketServer } from "./broadcast";
 import { SCAN_ROOT, CRASH_ROOT } from "./fs-utils";
@@ -21,6 +21,8 @@ export interface ServerHandle {
   wss: WebSocketServer;
   url: string;
   close: () => Promise<void>;
+  /** Deletes saved scans when the user chose to keep them only until quit. */
+  cleanupForQuit: () => Promise<void>;
 }
 
 export interface StartServerOptions {
@@ -33,7 +35,12 @@ export function startServer(options: StartServerOptions = {}): Promise<ServerHan
   const host = options.host || HOST;
   const port = options.port ?? PORT;
   if (options.installCrashHandlers !== false) installCrashHandlers();
-  void sweepDeletedScans();
+  void pruneScanData({ startup: true }).catch((error: Error) => console.error(`Scan data cleanup failed: ${error.message}`));
+  // Retention is by age, so check again while the app stays open (tray).
+  const pruneTimer = setInterval(() => {
+    void pruneScanData().catch((error: Error) => console.error(`Scan data cleanup failed: ${error.message}`));
+  }, 60 * 60 * 1000);
+  pruneTimer.unref();
 
   const server = http.createServer((req, res) => {
     router(req, res).catch((error: Error) => {
@@ -80,8 +87,10 @@ export function startServer(options: StartServerOptions = {}): Promise<ServerHan
         server,
         wss,
         url,
+        cleanupForQuit: deleteScansForQuit,
         close: () =>
           new Promise<void>((closeResolve) => {
+            clearInterval(pruneTimer);
             setSocketServer(null);
             wss.close(() => {
               server.close(() => closeResolve());

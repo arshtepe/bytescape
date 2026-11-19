@@ -23,7 +23,7 @@ See what is eating your disk, and clean it up safely. Bytescape scans a folder o
 - **Safe cleanup.** Old node_modules, git-ignored build output and tool caches (Xcode, Gradle, npm, Homebrew, pip) are pre-selected. Duplicates (confirmed byte for byte), old archives and logs are listed for you to review. App data, hidden folders and cloud-synced folders are never suggested. Move to Trash has a 6 second undo, and the treemap, folder sizes and totals update the moment you click.
 - **Breakdown by file type.** Find every video, disk image or archive across the scan.
 - **For agents.** An optional read-only MCP endpoint lets AI tools ask what is using your space.
-- **Private.** Everything runs locally. Scanning is read-only, and nothing about your files leaves your machine.
+- **Private.** Everything runs locally. Scanning is read-only, and nothing about your files leaves your machine. Saved scan data is deleted a day after the scan by default (or on quit, or after 3 or 7 days).
 
 ## Download
 

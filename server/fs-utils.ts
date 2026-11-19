@@ -4,7 +4,7 @@ import os from "os";
 import path from "path";
 import crypto from "crypto";
 import readline from "readline";
-import type { NodeKind, RootChoice } from "../shared/types";
+import type { KeepScans, NodeKind, RootChoice } from "../shared/types";
 
 // Where scan data lives. Defaults to the OS temp dir, which is usually on the
 // system drive — the drive most often being scanned — so the user can move it
@@ -17,6 +17,7 @@ export const DEFAULT_SCAN_ROOT = path.join(os.tmpdir(), STORE_DIRNAME);
 interface Settings {
   scanRoot?: string | null;
   mcpEnabled?: boolean;
+  keepScans?: KeepScans;
 }
 
 function readSettings(): Settings {
@@ -44,6 +45,22 @@ export function isMcpEnabled(): boolean {
 
 export function setMcpEnabled(enabled: boolean): Promise<void> {
   return writeSettings({ mcpEnabled: enabled });
+}
+
+const KEEP_SCANS: KeepScans[] = ["quit", "1d", "3d", "7d", "next"];
+export const DEFAULT_KEEP_SCANS: KeepScans = "1d";
+
+/** How long the saved scan stays on disk; see pruneScanData in scan-engine.ts. */
+export function getKeepScans(): KeepScans {
+  const { keepScans } = readSettings();
+  return keepScans && KEEP_SCANS.includes(keepScans) ? keepScans : DEFAULT_KEEP_SCANS;
+}
+
+export function setKeepScans(value: unknown): Promise<void> {
+  if (!KEEP_SCANS.includes(value as KeepScans)) {
+    throw Object.assign(new Error(`keepScans must be one of ${KEEP_SCANS.join(", ")}`), { statusCode: 400 });
+  }
+  return writeSettings({ keepScans: value as KeepScans });
 }
 
 // `let` exports are live bindings: importers see the new value after setScanRoot.
