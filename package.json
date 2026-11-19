@@ -1,6 +1,6 @@
 {
   "name": "bytescape",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "See what is eating your disk: a fast, local treemap disk space analyzer with safe cleanup.",
   "main": "dist-server/electron/main.js",
   "scripts": {

@@ -7,7 +7,7 @@ import { suggestCleanup } from "./cleanup";
 import { fileGroupsForScan, topFilesForScan } from "./file-classify";
 import { clampInt, isMcpEnabled, SCAN_ROOT } from "./fs-utils";
 
-export const SERVER_INFO = { name: "bytescape", version: "1.1.0" };
+export const SERVER_INFO = { name: "bytescape", version: "1.2.0" };
 const PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 
 type Args = Record<string, unknown>;
